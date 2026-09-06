@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Самопроверка стенда</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 24px; background: #111; color: #eee; }
+    #status { font-size: 20px; margin: 16px 0; }
+    .ok { color: #5ee292; }
+    .fail { color: #ff7373; }
+    li { margin: 8px 0; }
+    iframe { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <h1>Самопроверка клавиатурной матрицы</h1>
+  <div id="status">Запуск симулятора…</div>
+  <ol id="results"></ol>
+  <p><a href="/">Вернуться к стенду</a></p>
+  <iframe id="sim" src="/circuitjs.html?startCircuit=keyboard-matrix-5.txt&running=true"></iframe>
+  <iframe id="rc-sim" src="/circuitjs.html?startCircuit=clock-rc-notebook.txt&running=true"></iframe>
+  <script>
+    const expected = {
+      K1: ["B", "C"],
+      K2: ["A", "B", "D", "E", "G"],
+      K3: ["A", "B", "C", "D", "G"],
+      K4: ["B", "C", "F", "G"],
+      K5: ["A", "C", "D", "F", "G"]
+    };
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function sample(sim, durationSeconds, timeoutMs = 5000) {
+      const seenKeys = new Set();
+      const seenSegments = new Set();
+      const traceNames = ["Q0", "Q1", "/Q0", "/Q1", "C0N", "C1N", "C2N", "C3N", "ROW0", "ROW1"];
+      const ranges = Object.fromEntries(traceNames.map(name => [name, [Infinity, -Infinity]]));
+      const startTime = sim.getTime();
+      const deadline = performance.now() + timeoutMs;
+      while (sim.getTime() - startTime < durationSeconds && performance.now() < deadline) {
+        for (let i = 1; i <= 5; i++) {
+          if (sim.getNodeVoltage(`KEY${i}`) > 2.5) seenKeys.add(`K${i}`);
+        }
+        for (const s of "ABCDEFG") {
+          if (sim.getNodeVoltage(`SEG_${s}`) > 2.5) seenSegments.add(s);
+        }
+        for (const name of traceNames) {
+          const value = sim.getNodeVoltage(name);
+          ranges[name][0] = Math.min(ranges[name][0], value);
+          ranges[name][1] = Math.max(ranges[name][1], value);
+        }
+        await sleep(4);
+      }
+      return { keys: [...seenKeys].sort(), segments: [...seenSegments].sort(), ranges };
+    }
+
+    async function sampleRange(sim, node, durationSeconds, timeoutMs = 5000) {
+      let min = Infinity;
+      let max = -Infinity;
+      const startTime = sim.getTime();
+      const deadline = performance.now() + timeoutMs;
+      while (sim.getTime() - startTime < durationSeconds && performance.now() < deadline) {
+        const value = sim.getNodeVoltage(node);
+        min = Math.min(min, value);
+        max = Math.max(max, value);
+        await sleep(4);
+      }
+      return [min, max];
+    }
+
+    async function run() {
+      const status = document.querySelector("#status");
+      const results = document.querySelector("#results");
+      const frame = document.querySelector("#sim");
+      while (!frame.contentWindow.CircuitJS1) await sleep(50);
+      const sim = frame.contentWindow.CircuitJS1;
+      const source = await fetch("/circuitjs1/circuits/keyboard-matrix-5.txt").then(r => r.text());
+      let allOk = true;
+
+      for (const key of Object.keys(expected)) {
+        const closed = source.replace(
+          new RegExp(`^(s\\s+[^\\n]+\\s)1(\\s+false\\s+${key})$`, "m"),
+          (_match, before, after) => `${before}0${after}`
+        );
+        sim.importCircuit("$ 1 0.000005 10 50 5 50\n", false);
+        await sleep(40);
+        sim.importCircuit(closed, false);
+        sim.setSimRunning(true);
+        await sleep(40);
+        // Полный цикл двухразрядного счётчика при 10 Гц занимает 0,4 с.
+        // Проверяем по модельному времени, а не по скорости конкретного браузера.
+        const actual = await sample(sim, 0.45);
+        const wantedSegments = [...expected[key]].sort();
+        const ok = JSON.stringify(actual.keys) === JSON.stringify([key])
+          && JSON.stringify(actual.segments) === JSON.stringify(wantedSegments);
+        allOk &&= ok;
+        const li = document.createElement("li");
+        li.className = ok ? "ok" : "fail";
+        const columns = [0, 1, 2, 3].map(i => {
+          const range = actual.ranges[`C${i}N`];
+          return `C${i}=${range[0].toFixed(1)}…${range[1].toFixed(1)}`;
+        }).join("; ");
+        li.textContent = `${key}: ${ok ? "OK" : "ОШИБКА"}; ключи=${actual.keys.join(",") || "—"}; сегменты=${actual.segments.join("") || "—"}; ${columns}`;
+        results.append(li);
+      }
+
+      const rcFrame = document.querySelector("#rc-sim");
+      while (!rcFrame.contentWindow.CircuitJS1) await sleep(50);
+      const rcSim = rcFrame.contentWindow.CircuitJS1;
+      rcSim.setSimRunning(true);
+      const rcRange = await sampleRange(rcSim, "RC_OUT", 0.5);
+      const rcOk = rcRange[0] < 0.5 && rcRange[1] > 4.5;
+      allOk &&= rcOk;
+      const rcLi = document.createElement("li");
+      rcLi.className = rcOk ? "ok" : "fail";
+      rcLi.textContent = `RC-генератор: ${rcOk ? "OK" : "ОШИБКА"}; выход=${rcRange[0].toFixed(1)}…${rcRange[1].toFixed(1)} В`;
+      results.append(rcLi);
+
+      status.className = allOk ? "ok" : "fail";
+      status.textContent = allOk ? "Матрица и RC-генератор исправны" : "Есть ошибки в схеме";
+      document.title = allOk ? "PASS — самопроверка" : "FAIL — самопроверка";
+    }
+
+    run().catch(error => {
+      const status = document.querySelector("#status");
+      status.className = "fail";
+      status.textContent = `Ошибка запуска тестов: ${error.message}`;
+      document.title = "ERROR — самопроверка";
+    });
+  </script>
+</body>
+</html>

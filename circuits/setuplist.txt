@@ -1,0 +1,3 @@
+# Схемы лаборатории Labs-Electronic
+keyboard-matrix-5.txt Клавиатурная матрица 5 кнопок
+clock-rc-notebook.txt RC-генератор из конспекта

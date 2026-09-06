@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Лаборатория — клавиатурная матрица</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { max-width: 900px; margin: 0 auto; padding: 48px 24px; background: #111; color: #eee; }
+    h1 { margin-bottom: 8px; }
+    p { color: #c9c9c9; line-height: 1.55; }
+    .cards { display: grid; gap: 16px; margin-top: 28px; }
+    a { display: block; padding: 20px; border: 1px solid #444; border-radius: 12px; color: #fff; text-decoration: none; background: #1d1d1d; }
+    a:hover { border-color: #54a8ff; background: #232b35; }
+    strong { display: block; margin-bottom: 6px; font-size: 18px; }
+    code { color: #9bd3ff; }
+  </style>
+</head>
+<body>
+  <h1>Клавиатурная матрица 5 кнопок</h1>
+  <p>Бесплатный локальный CircuitJS. Никакой регистрации и платной разблокировки.</p>
+  <div class="cards">
+    <a href="/circuitjs.html?startCircuit=keyboard-matrix-5.txt&running=true&IECGates=true">
+      <strong>Открыть полную лабораторную схему</strong>
+      Генератор → D-триггеры → NAND-дешифратор → матрица → индикатор.
+    </a>
+    <a href="/circuitjs.html?startCircuit=clock-rc-notebook.txt&running=true&IECGates=true">
+      <strong>Открыть RC-генератор из конспекта</strong>
+      Отдельный блок для наблюдения заряда и разряда конденсатора.
+    </a>
+  </div>
+  <p>В полной схеме нажимайте переключатели <code>K1…K5</code>. Правый клик открывает параметры элемента.</p>
+  <p><a href="/test.html"><strong>Самопроверка стенда</strong>Автоматически проверяет распознавание K1…K5 и сегменты цифр 1…5.</a></p>
+</body>
+</html>
