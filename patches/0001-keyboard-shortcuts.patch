@@ -1,0 +1,35 @@
+diff --git a/src/com/lushprojects/circuitjs1/client/SwitchElm.java b/src/com/lushprojects/circuitjs1/client/SwitchElm.java
+index 3c2b830..b3fb604 100644
+--- a/src/com/lushprojects/circuitjs1/client/SwitchElm.java
++++ b/src/com/lushprojects/circuitjs1/client/SwitchElm.java
+@@ -65,6 +65,11 @@ class SwitchElm extends CircuitElm {
+ 	label = null;
+ 	if ((flags & FLAG_LABEL) != 0)
+ 	    label = CustomLogicModel.unescape(st.nextToken());
++	// Labs-Electronic uses K1..K5 for the five matrix keys.  Assign the
++	// matching number key automatically so the switches are usable from a
++	// laptop keyboard as well as by clicking the lever.
++	if (label != null && label.matches("K[1-5]"))
++	    keyShortcut = label.substring(1).toLowerCase();
+     }
+     int getDumpType() { return 's'; }
+ 
+@@ -132,13 +137,16 @@ class SwitchElm extends CircuitElm {
+ 	drawThickLine(g, ps, ps2);
+ 	
+ 	if (label != null) {
++	    String displayLabel = label;
++	    if (keyShortcut != null)
++		displayLabel += " [" + keyShortcut.toUpperCase() + "]";
+ 	    g.setColor(needsHighlight() ? selectColor : whiteColor);
+ 	    if (Math.abs(dy) > Math.abs(dx))
+-		g.drawString(label, x+10, (y < y2 ? lead1 : lead2).y-5);
++		g.drawString(displayLabel, x+10, (y < y2 ? lead1 : lead2).y-5);
+ 	    else {
+ 		g.save();
+ 		g.context.setTextAlign("center");
+-		g.drawString(label, (x+x2)/2, (x2 > x) ? y+15 : y-15);
++		g.drawString(displayLabel, (x+x2)/2, (x2 > x) ? y+15 : y-15);
+ 		g.restore();
+ 	    }
+ 	}
