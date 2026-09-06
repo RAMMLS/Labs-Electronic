@@ -88,8 +88,8 @@
         sim.importCircuit(closed, false);
         sim.setSimRunning(true);
         await sleep(40);
-        // Полный цикл двухразрядного счётчика при 10 Гц занимает 0,4 с.
-        // Проверяем по модельному времени, а не по скорости конкретного браузера.
+        // Берём большой запас по модельному времени: этого достаточно для
+        // множества полных циклов двухразрядного счётчика на 2 кГц.
         const actual = await sample(sim, 0.45);
         const wantedSegments = [...expected[key]].sort();
         const ok = JSON.stringify(actual.keys) === JSON.stringify([key])
@@ -104,6 +104,43 @@
         li.textContent = `${key}: ${ok ? "OK" : "ОШИБКА"}; ключи=${actual.keys.join(",") || "—"}; сегменты=${actual.segments.join("") || "—"}; ${columns}`;
         results.append(li);
       }
+
+      // Проверяем пользовательский сценарий: новая клавиша должна снять
+      // предыдущую, а на индикаторе должна остаться только новая цифра.
+      sim.importCircuit(source, false);
+      sim.setSimRunning(true);
+      await sleep(50);
+      const switches = {};
+      let display;
+      for (const element of sim.getElements()) {
+        if (typeof element.getSwitchLabel === "function") {
+          const label = element.getSwitchLabel();
+          if (label) switches[label] = element;
+        }
+        if (typeof element.getDisplayedSegments === "function") display = element;
+      }
+      switches.K1.toggleSwitch();
+      await sleep(40);
+      const firstSelection = await sample(sim, 0.1, 2000);
+      const firstDisplayed = String(display.getDisplayedSegments()).split("").sort();
+      switches.K3.toggleSwitch();
+      await sleep(40);
+      const secondSelection = await sample(sim, 0.1, 2000);
+      const secondDisplayed = String(display.getDisplayedSegments()).split("").sort();
+      const selectionChecks = [
+        JSON.stringify(firstSelection.keys) === JSON.stringify(["K1"]),
+        JSON.stringify(firstSelection.segments) === JSON.stringify(expected.K1),
+        JSON.stringify(firstDisplayed) === JSON.stringify(expected.K1),
+        JSON.stringify(secondSelection.keys) === JSON.stringify(["K3"]),
+        JSON.stringify(secondSelection.segments) === JSON.stringify(expected.K3),
+        JSON.stringify(secondDisplayed) === JSON.stringify(expected.K3)
+      ];
+      const selectionOk = selectionChecks.every(Boolean);
+      allOk &&= selectionOk;
+      const selectionLi = document.createElement("li");
+      selectionLi.className = selectionOk ? "ok" : "fail";
+      selectionLi.textContent = `Замена K1 → K3: ${selectionOk ? "OK" : "ОШИБКА"}; проверки=${selectionChecks.map(Number).join("")}; K1=${firstSelection.keys.join(",") || "—"}/${firstSelection.segments.join("") || "—"}/${firstDisplayed.join("") || "—"}; K3=${secondSelection.keys.join(",") || "—"}/${secondSelection.segments.join("") || "—"}/${secondDisplayed.join("") || "—"}`;
+      results.append(selectionLi);
 
       const rcFrame = document.querySelector("#rc-sim");
       while (!rcFrame.contentWindow.CircuitJS1) await sleep(50);

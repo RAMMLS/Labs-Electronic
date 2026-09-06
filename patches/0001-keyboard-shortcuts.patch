@@ -14,7 +14,30 @@ index 3c2b830..b3fb604 100644
      }
      int getDumpType() { return 's'; }
  
-@@ -132,13 +137,16 @@ class SwitchElm extends CircuitElm {
+@@ -71,3 +76,22 @@ class SwitchElm extends CircuitElm {
++    String getSwitchLabelJS() { return label; }
++
++    void toggleSwitchJS() {
++	toggle();
++	app.needAnalyze();
++	app.repaint();
++    }
++
++    void addJSMethods() {
++	super.addJSMethods();
++	addSwitchJSMethods();
++    }
++
++    native void addSwitchJSMethods() /*-{
++	var that = this;
++	this.getSwitchLabel = $entry(function() { return that.@com.lushprojects.circuitjs1.client.SwitchElm::getSwitchLabelJS()(); });
++	this.toggleSwitch = $entry(function() { that.@com.lushprojects.circuitjs1.client.SwitchElm::toggleSwitchJS()(); });
++    }-*/;
++
+     void dumpXml(Document doc, Element elem) {
+         super.dumpXml(doc, elem);
+ 	if (position != 0)
+@@ -132,13 +156,16 @@ class SwitchElm extends CircuitElm {
  	drawThickLine(g, ps, ps2);
  	
  	if (label != null) {
@@ -33,3 +56,120 @@ index 3c2b830..b3fb604 100644
  		g.restore();
  	    }
  	}
+@@ -187,9 +214,27 @@ class SwitchElm extends CircuitElm {
+ 	if (position >= posCount)
+ 	    position = 0;
+     }
++
++    boolean isLabsElectronicMatrixKey() {
++	return label != null && label.matches("K[1-5]");
++    }
+     
+     void toggle() {
+ 	TestManager.recordSwitchToggle(this);
++	// The five laboratory keys behave like a keyboard selection: pressing a
++	// new key releases the previous one and keeps the new digit selected.
++	if (isLabsElectronicMatrixKey()) {
++	    for (int i = 0; i != sim.elmList.size(); i++) {
++		Object o = sim.elmList.elementAt(i);
++		if (o instanceof SwitchElm) {
++		    SwitchElm s2 = (SwitchElm) o;
++		    if (s2.isLabsElectronicMatrixKey())
++			s2.position = 1;
++		}
++	    }
++	    position = 0;
++	    return;
++	}
+ 	simpleToggle();
+         if (label != null) {
+             int i;
+diff --git a/src/com/lushprojects/circuitjs1/client/SevenSegElm.java b/src/com/lushprojects/circuitjs1/client/SevenSegElm.java
+index 29150be..9404896 100644
+--- a/src/com/lushprojects/circuitjs1/client/SevenSegElm.java
++++ b/src/com/lushprojects/circuitjs1/client/SevenSegElm.java
+@@ -23,6 +23,36 @@ package com.lushprojects.circuitjs1.client;
+ import com.google.gwt.xml.client.Document;
+ 
+ class SevenSegElm extends ChipElm {
++	static final int FLAG_VISUAL_PERSISTENCE = 1 << 9;
++	boolean persistentSegments[];
++	boolean scanSegments[];
++	boolean scanActive;
++
++	boolean hasVisualPersistence() {
++	    return (flags & FLAG_VISUAL_PERSISTENCE) != 0;
++	}
++
++	String getDisplayedSegmentsJS() {
++	    String result = "";
++	    for (int i = 0; i != segmentCount; i++) {
++		boolean value = hasVisualPersistence() && persistentSegments != null
++			? persistentSegments[i] : pins[i].value;
++		if (value)
++		    result += Character.toString((char) ('A' + i));
++	    }
++	    return result;
++	}
++
++	void addJSMethods() {
++	    super.addJSMethods();
++	    addSevenSegJSMethods();
++	}
++
++	native void addSevenSegJSMethods() /*-{
++	    var that = this;
++	    this.getDisplayedSegments = $entry(function() { return that.@com.lushprojects.circuitjs1.client.SevenSegElm::getDisplayedSegmentsJS()(); });
++	}-*/;
++
+ 	// base segment count not including decimal point or colon
+ 	int baseSegmentCount;
+ 	
+@@ -238,6 +268,36 @@ class SevenSegElm extends ChipElm {
+ 	    for (i = 0; i != segmentCount; i++)
+ 		diodes[i].doStep(diodeDirection*(volts[i]-volts[commonPin]));
+ 	}
++
++	void execute() {
++	    if (!hasVisualPersistence())
++		return;
++	    if (persistentSegments == null || persistentSegments.length != segmentCount) {
++		persistentSegments = new boolean[segmentCount];
++		scanSegments = new boolean[segmentCount];
++	    }
++	    boolean active = false;
++	    for (int i = 0; i != segmentCount; i++) {
++		if (pins[i].value) {
++		    scanSegments[i] = true;
++		    active = true;
++		}
++	    }
++	    if (!active && scanActive) {
++		for (int i = 0; i != segmentCount; i++) {
++		    persistentSegments[i] = scanSegments[i];
++		    scanSegments[i] = false;
++		}
++	    }
++	    scanActive = active;
++	}
++
++	void reset() {
++	    super.reset();
++	    persistentSegments = null;
++	    scanSegments = null;
++	    scanActive = false;
++	}
+         boolean nonLinear() { return diodeDirection != 0; }
+ 	void draw(Graphics g) {
+ 	    drawChip(g);
+@@ -314,7 +374,9 @@ class SevenSegElm extends ChipElm {
+ 	void setColor(Graphics g, int p) {
+ 	    boolean whiteBkg = isPrintable(); 
+ 	    if (diodeDirection == 0) {
+-		g.setColor(pins[p].value ? Color.red :
++		boolean value = hasVisualPersistence() && persistentSegments != null
++			? persistentSegments[p] : pins[p].value;
++		g.setColor(value ? Color.red :
+ 			whiteBkg ? lightgray : darkred);
+ 		return;
+ 	    }
